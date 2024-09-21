@@ -1,193 +1,154 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
-import axios from 'axios';
+import React, { useState } from 'react';
 
-// Grade calculation logic
-const getGrade = (score) => {
+const getGradeFromScore = (score, didNotSit) => {
+  if (didNotSit) return 'F'; // Student did not sit for the exam
+  
   if (score >= 90) return 'A';
-  if (score >= 85) return 'A-';
-  if (score >= 80) return 'B+';
-  if (score >= 75) return 'B';
-  if (score >= 70) return 'B-';
-  if (score >= 65) return 'C+';
-  if (score >= 60) return 'C';
-  if (score >= 55) return 'D+';
-  if (score >= 50) return 'D';
-  return 'F';
+  else if (score >= 85) return 'A-';
+  else if (score >= 80) return 'B+';
+  else if (score >= 75) return 'B';
+  else if (score >= 70) return 'B-';
+  else if (score >= 65) return 'C+';
+  else if (score >= 60) return 'C';
+  else if (score >= 55) return 'D+';
+  else if (score >= 50) return 'D';
+  else if (score >= 40) return 'E';
+  else return 'F'; // For scores below 40
 };
 
 const AddGradeForm = () => {
-  const location = useLocation();
-  const studentName = location.state?.studentName || ''; // Getting student name from state
+  const [name, setName] = useState('');
+  const [score, setScore] = useState('');
+  const [grade, setGrade] = useState('');
+  const [didNotSit, setDidNotSit] = useState(false);
+  const [error, setError] = useState('');
 
-  const [students, setStudents] = useState([]); // Store fetched student grades
-  const [score, setScore] = useState(''); // Form score value
-  const [selectedStudent, setSelectedStudent] = useState(null); // Track selected student for editing
-  const [error, setError] = useState(''); // Error handling state
+  const handleScoreChange = (e) => {
+    const newScore = e.target.value;
+    
+    if (newScore === '' || (!isNaN(newScore) && newScore >= 0 && newScore <= 100)) {
+      setScore(newScore);
 
-  // Fetch all grades from backend on component mount
-  useEffect(() => {
-    fetchGrades();
-  }, []);
-
-  // Function to fetch all grades
-  const fetchGrades = async () => {
-    try {
-      const response = await axios.get('http://127.0.0.1:8000/grades/');
-      setStudents(response.data); // Update the state with fetched grades
-    } catch (error) {
-      console.error('Error fetching grades:', error);
-    }
-  };
-
-  // Handle form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const numericScore = parseInt(score, 10);
-
-    // Ensure valid score and student name
-    if (studentName && numericScore >= 0 && numericScore <= 100) {
-      const grade = getGrade(numericScore);
-
-      // Check for duplicate grade submission
-      const existingStudent = students.find((student) => student.name === studentName);
-
-      try {
-        if (selectedStudent) {
-          // Update existing grade if editing
-          await axios.put(`http://127.0.0.1:8000/grades/${selectedStudent.id}`, {
-            name: studentName,
-            score: numericScore,
-            grade,
-          });
-        } else if (!existingStudent) {
-          // Create new grade if not editing and no existing grade
-          await axios.post('http://127.0.0.1:8000/grades/', {
-            name: studentName,
-            score: numericScore,
-            grade,
-          });
-        } else {
-          // Show error if grade already exists for the student
-          setError('This student already has a submitted grade.');
-          return;
-        }
-
-        // After successful submission, fetch updated grades
-        fetchGrades();
-
-        // Reset the form fields
-        setScore('');
-        setSelectedStudent(null);
-        setError('');
-      } catch (error) {
-        console.error('Error submitting grade:', error);
-        setError('Failed to submit grade.');
+      if (newScore === '' || newScore < 0 || newScore > 100) {
+        setGrade('');
+      } else {
+        setGrade(getGradeFromScore(Number(newScore), didNotSit));
       }
-    } else {
-      setError('Score must be between 0 and 100.');
     }
   };
 
-  // Handle selecting a student for editing
-  const handleEditStudent = (student) => {
-    setSelectedStudent(student);
-    setScore(student.score);
-  };
-
-  // Handle deleting a student grade
-  const handleDeleteGrade = async (studentId) => {
-    const confirmation = window.confirm('Are you sure you want to delete this grade?');
-    if (!confirmation) return;
-
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!name) {
+      setError('Student name is required');
+      return;
+    }
+    if (didNotSit) {
+      setGrade('F');
+    } else if (score === '') {
+      setError('Score is required');
+      return;
+    } else if (score < 0 || score > 100) {
+      setError('Score must be between 0 and 100');
+      return;
+    }
+    setError('');
+    
     try {
-      await axios.delete(`http://127.0.0.1:8000/grades/${studentId}`);
-      setStudents(students.filter((student) => student.id !== studentId)); // Remove deleted student from UI
+      // Replace with actual assignment_id and student_id
+      const assignment_id = 1; 
+      const student_id = 1;
+      const date_recorded = new Date().toISOString().split('T')[0]; // Format as YYYY-MM-DD
+
+      const response = await fetch('http://localhost:5000/submit-grade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          assignment_id,
+          student_id,
+          score: didNotSit ? null : Number(score), // Send null if the student did not sit
+          grade,
+          date_recorded
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      alert('Grade submitted successfully');
+      setName('');
+      setScore('');
+      setGrade('');
+      setDidNotSit(false); // Reset the checkbox
     } catch (error) {
-      console.error('Error deleting grade:', error);
-      setError('Failed to delete grade.');
+      console.error('Error submitting grade:', error);
+      setError('Error submitting grade');
     }
   };
 
   return (
-    <div className="max-w-lg mx-auto p-4">
-      {/* Grade Submission Form */}
-      <form onSubmit={handleSubmit} className="bg-blue-50 shadow-md rounded px-8 py-6 mb-4">
-        <h2 className="text-lg font-bold mb-4 text-blue-800">
-          {selectedStudent ? 'Edit Student Grade' : 'Add Student Grade'}
-        </h2>
-
-        {error && <p className="text-red-500 mb-4">{error}</p>}
-
+    <div className="bg-blue-300 p-6 rounded-lg shadow-lg w-full max-w-sm mx-auto mt-10">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Add Grade</h2>
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      <form onSubmit={handleSubmit}>
         <div className="mb-4">
-          <label className="block text-blue-700 text-sm font-bold mb-2">Student's Name</label>
+          <label htmlFor="name" className="block text-gray-700 font-semibold mb-2">Student Name</label>
           <input
             type="text"
-            value={studentName} // Keep the student name constant
-            readOnly
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring focus:ring-blue-300"
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter student's name"
           />
         </div>
-
         <div className="mb-4">
-          <label className="block text-blue-700 text-sm font-bold mb-2">Score (0-100)</label>
+          <label htmlFor="score" className="block text-gray-700 font-semibold mb-2">Score</label>
           <input
             type="number"
+            id="score"
             value={score}
-            onChange={(e) => setScore(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:ring focus:ring-blue-300"
-            required
+            onChange={handleScoreChange}
             min="0"
             max="100"
+            className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter score"
+            disabled={didNotSit} // Disable score input if did not sit
           />
         </div>
-
+        <div className="mb-4">
+          <label htmlFor="didNotSit" className="flex items-center text-gray-700 font-semibold">
+            <input
+              type="checkbox"
+              id="didNotSit"
+              checked={didNotSit}
+              onChange={() => setDidNotSit(!didNotSit)}
+              className="mr-2"
+            />
+            Did not sit for the exam
+          </label>
+        </div>
+        <div className="mb-4">
+          <label htmlFor="grade" className="block text-gray-700 font-semibold mb-2">Grade</label>
+          <input
+            type="text"
+            id="grade"
+            value={grade}
+            readOnly
+            className="w-full p-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
+            placeholder="Grade will be auto-filled"
+          />
+        </div>
         <button
           type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:ring focus:ring-blue-300 transition duration-300 ease-in-out"
+          className="w-full bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          {selectedStudent ? 'Update Grade' : 'Submit Grade'}
+          Submit
         </button>
       </form>
-
-      {/* Submitted Grades Table */}
-      <div className="bg-blue-100 p-4 rounded mt-4">
-        <h3 className="text-lg font-bold mb-2 text-blue-800">Submitted Grades</h3>
-
-        <table className="min-w-full table-auto bg-white shadow-md rounded">
-          <thead>
-            <tr className="bg-blue-600 text-white">
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Score</th>
-              <th className="px-4 py-2">Grade</th>
-              <th className="px-4 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((student) => (
-              <tr key={student.id} className="border-t">
-                <td className="px-4 py-2">{student.name}</td>
-                <td className="px-4 py-2">{student.score}</td>
-                <td className="px-4 py-2">{student.grade}</td>
-                <td className="px-4 py-2">
-                  <button
-                    className="text-sm text-blue-600 underline hover:text-blue-800 hover:bg-blue-100 transition duration-300 ease-in-out rounded px-2 py-1 mr-2"
-                    onClick={() => handleEditStudent(student)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    className="text-sm text-red-600 underline hover:text-red-800 hover:bg-red-100 transition duration-300 ease-in-out rounded px-2 py-1"
-                    onClick={() => handleDeleteGrade(student.id)}
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 };
