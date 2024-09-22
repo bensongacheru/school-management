@@ -1,161 +1,150 @@
-import React, { useState, useEffect, useCallback } from "react";
-
-// Sample student data - replace this with your student fetching logic
-const students = [
-  { id: 1, name: "John Doe" },
-  { id: 2, name: "Jane Smith" },
-  { id: 3, name: "Alice Johnson" },
-];
+import React, { useState } from "react";
 
 const Attendance = () => {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [attendanceDate, setAttendanceDate] = useState("");
-  const [selectedStudentId, setSelectedStudentId] = useState("");
-  const [markType, setMarkType] = useState("present");
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState({});
+  const [actionDate, setActionDate] = useState("");
+
   const currentYear = new Date().getFullYear();
+
+  const generateId = () => Date.now();
 
   const showSuccessMessage = (message) => {
     setSuccessMessage(message);
-    setTimeout(() => setSuccessMessage(""), 3000);
+    setTimeout(() => {
+      setSuccessMessage("");
+    }, 3000);
   };
 
   const showErrorMessage = (message) => {
     setError(message);
-    setTimeout(() => setError(""), 3000);
+    setTimeout(() => {
+      setError("");
+    }, 3000);
   };
 
-  const isValidAttendanceDate = (attendanceDate) => {
-    if (!attendanceDate) {
-      return "Attendance date is required.";
-    }
-    const selectedYear = new Date(attendanceDate).getFullYear();
-    if (selectedYear !== currentYear) {
-      return "Attendance date must be in the current year.";
-    }
-    return null; // No errors
-  };
+  const validateName = (name) => /^[A-Za-z]+$/.test(name);
 
-  const handleMarkAttendance = async (e) => {
+  const handleAddOrUpdateAttendance = (e) => {
     e.preventDefault();
 
-    const errorMessage = isValidAttendanceDate(attendanceDate);
-    if (errorMessage) {
-      showErrorMessage(errorMessage);
+    // Validate required fields
+    if (!firstName || !lastName || !attendanceDate) {
+      showErrorMessage("First name, last name, and date are required");
       return;
     }
 
-    const student = students.find((s) => s.id === parseInt(selectedStudentId));
+    const studentName = `${firstName} ${lastName}`;
 
-    if (!student) {
-      showErrorMessage("Please select a valid student.");
+    // Validate name length and characters
+    if (studentName.length > 20) {
+      showErrorMessage("Name must not exceed 20 characters");
+      return;
+    }
+    if (!validateName(firstName) || !validateName(lastName)) {
+      showErrorMessage("Names must contain only alphabetic characters");
       return;
     }
 
-    const isAlreadyMarked =
-      markType === "present"
-        ? attendanceRecords.some(
-            (record) =>
-              record.id === student.id &&
-              record.present.includes(attendanceDate)
-          )
-        : attendanceRecords.some(
-            (record) =>
-              record.id === student.id && record.absent.includes(attendanceDate)
-          );
-
-    if (isAlreadyMarked) {
-      showErrorMessage(
-        `Attendance for ${markType} on ${attendanceDate} is already marked.`
-      );
+    const selectedYear = new Date(attendanceDate).getFullYear();
+    if (selectedYear !== currentYear) {
+      showErrorMessage("Attendance date must be in the current year");
       return;
     }
 
-    const newRecord = {
-      id: student.id,
-      studentName: student.name,
-      present: markType === "present" ? [attendanceDate] : [],
-      absent: markType === "absent" ? [attendanceDate] : [],
-    };
+    const existingRecordIndex = attendanceRecords.findIndex(
+      (record) => record.name === studentName
+    );
 
-    setAttendanceRecords((prevRecords) => {
-      const existingRecord = prevRecords.find(
-        (record) => record.id === student.id
-      );
-      const updatedRecords = existingRecord
-        ? prevRecords.map((record) =>
-            record.id === student.id
-              ? {
-                  ...record,
-                  present:
-                    markType === "present"
-                      ? [...record.present, attendanceDate]
-                      : record.present,
-                  absent:
-                    markType === "absent"
-                      ? [...record.absent, attendanceDate]
-                      : record.absent,
-                }
-              : record
-          )
-        : [...prevRecords, newRecord];
-
-      localStorage.setItem("attendanceRecords", JSON.stringify(updatedRecords));
-      return updatedRecords;
-    });
-
-    showSuccessMessage("Attendance marked successfully!");
-
-    const payload = {
-      student_id: student.id,
-      attendance_date: attendanceDate,
-      status: markType,
-    };
-
-    try {
-      const response = await fetch("http://localhost:8000/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to mark attendance");
+    if (existingRecordIndex > -1) {
+      const existingRecord = attendanceRecords[existingRecordIndex];
+      // Check for duplicate date in present or absent days
+      if (
+        existingRecord.present.includes(attendanceDate) ||
+        existingRecord.absent.includes(attendanceDate)
+      ) {
+        showErrorMessage(
+          "Attendance record for this student on this date already exists"
+        );
+        return;
       }
-      showSuccessMessage(data.message);
-    } catch (error) {
-      showErrorMessage(error.message || "Failed to mark attendance");
+
+      // Add date to present days
+      existingRecord.present.push(attendanceDate);
+      setAttendanceRecords([
+        ...attendanceRecords.slice(0, existingRecordIndex),
+        existingRecord,
+        ...attendanceRecords.slice(existingRecordIndex + 1),
+      ]);
+      showSuccessMessage("Attendance updated successfully!");
+    } else {
+      const newRecord = {
+        id: generateId(),
+        name: studentName,
+        present: [attendanceDate],
+        absent: [],
+      };
+      setAttendanceRecords([...attendanceRecords, newRecord]);
+      showSuccessMessage("Attendance added successfully!");
     }
 
+    // Reset input fields
+    setFirstName("");
+    setLastName("");
     setAttendanceDate("");
-    setSelectedStudentId("");
-    setMarkType("present");
   };
 
-  const handleDeleteAttendance = useCallback((id) => {
+  const handleDeleteAttendance = (id) => {
     if (window.confirm("Are you sure you want to delete this record?")) {
-      setAttendanceRecords((prevRecords) => {
-        const updatedRecords = prevRecords.filter((record) => record.id !== id);
-        localStorage.setItem(
-          "attendanceRecords",
-          JSON.stringify(updatedRecords)
-        );
-        return updatedRecords;
-      });
+      setAttendanceRecords(
+        attendanceRecords.filter((record) => record.id !== id)
+      );
       showSuccessMessage("Attendance record deleted successfully!");
     }
-  }, []);
+  };
 
   const handleDropdownToggle = (id) => {
     setDropdownOpen((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
+  const handleChangeAttendance = (id, type) => {
+    if (!actionDate) {
+      showErrorMessage(`Please select a date to mark as ${type}.`);
+      return;
+    }
+
+    const selectedYear = new Date(actionDate).getFullYear();
+    if (selectedYear !== currentYear) {
+      showErrorMessage("Attendance date must be in the current year");
+      return;
+    }
+
+    setAttendanceRecords((prevRecords) =>
+      prevRecords.map((record) => {
+        if (record.id === id) {
+          if (type === "present") {
+            return { ...record, present: [...record.present, actionDate] };
+          } else if (type === "absent") {
+            return { ...record, absent: [...record.absent, actionDate] };
+          }
+        }
+        return record;
+      })
+    );
+    showSuccessMessage("Attendance updated successfully!");
+    setActionDate("");
+    setDropdownOpen({});
+    setTimeout(() => setDropdownOpen({}), 3000); // Close dropdown after 3 seconds
+  };
+
   const handleRemoveAttendance = (id, type, date) => {
-    setAttendanceRecords((prevRecords) => {
-      const updatedRecords = prevRecords.map((record) => {
+    setAttendanceRecords((prevRecords) =>
+      prevRecords.map((record) => {
         if (record.id === id) {
           if (type === "present") {
             return {
@@ -170,19 +159,10 @@ const Attendance = () => {
           }
         }
         return record;
-      });
-      localStorage.setItem("attendanceRecords", JSON.stringify(updatedRecords));
-      return updatedRecords;
-    });
+      })
+    );
     showSuccessMessage(`Date ${date} removed from ${type}`);
   };
-
-  useEffect(() => {
-    const savedRecords = localStorage.getItem("attendanceRecords");
-    if (savedRecords) {
-      setAttendanceRecords(JSON.parse(savedRecords));
-    }
-  }, []);
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-lg">
@@ -193,27 +173,28 @@ const Attendance = () => {
       )}
 
       <form
-        onSubmit={handleMarkAttendance}
+        onSubmit={handleAddOrUpdateAttendance}
         className="mb-6 flex flex-col md:flex-row"
       >
         <div className="flex-grow mb-4 md:mb-0 md:mr-2">
-          <label htmlFor="studentSelect" className="sr-only">
-            Select Student
-          </label>
-          <select
-            id="studentSelect"
-            value={selectedStudentId}
-            onChange={(e) => setSelectedStudentId(e.target.value)}
+          <input
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
             className="border rounded-lg py-2 px-4 w-full"
-            aria-label="Select Student"
-          >
-            <option value="">Select a student</option>
-            {students.map((student) => (
-              <option key={student.id} value={student.id}>
-                {student.name}
-              </option>
-            ))}
-          </select>
+            placeholder="Enter first name"
+            aria-label="First Name"
+          />
+        </div>
+        <div className="flex-grow mb-4 md:mb-0 md:mr-2">
+          <input
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className="border rounded-lg py-2 px-4 w-full"
+            placeholder="Enter last name"
+            aria-label="Last Name"
+          />
         </div>
         <div className="flex-grow mb-4 md:mb-0 md:mr-2">
           <input
@@ -224,22 +205,11 @@ const Attendance = () => {
             aria-label="Attendance Date"
           />
         </div>
-        <div className="relative mb-4 md:mb-0 md:mr-2">
-          <select
-            value={markType}
-            onChange={(e) => setMarkType(e.target.value)}
-            className="border rounded-lg py-2 px-4 w-full"
-            aria-label="Mark Attendance"
-          >
-            <option value="present">Mark Present</option>
-            <option value="absent">Mark Absent</option>
-          </select>
-        </div>
         <button
           type="submit"
           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg"
         >
-          Mark
+          Add
         </button>
       </form>
 
@@ -248,7 +218,7 @@ const Attendance = () => {
         <thead className="bg-gray-100">
           <tr>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Student
+              Student Name
             </th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Days Present
@@ -264,8 +234,8 @@ const Attendance = () => {
         <tbody className="bg-white divide-y divide-gray-200">
           {attendanceRecords.map((record) => (
             <tr key={record.id}>
-              <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                {record.studentName}
+              <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {record.name}
               </td>
               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                 <div className="relative">
@@ -328,9 +298,48 @@ const Attendance = () => {
                 </div>
               </td>
               <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                <div className="relative">
+                  <button
+                    onClick={() => handleDropdownToggle(`actions-${record.id}`)}
+                    className="text-gray-600 hover:text-gray-800"
+                  >
+                    Actions
+                  </button>
+                  {dropdownOpen[`actions-${record.id}`] && (
+                    <div className="absolute right-0 bg-white shadow-lg rounded-lg mt-1 z-10">
+                      <div className="px-4 py-2">
+                        <input
+                          type="date"
+                          value={actionDate}
+                          onChange={(e) => setActionDate(e.target.value)}
+                          className="border rounded-lg py-1 px-2 w-full mb-2"
+                          aria-label="Action Date"
+                        />
+                        <div className="flex justify-between">
+                          <button
+                            onClick={() =>
+                              handleChangeAttendance(record.id, "present")
+                            }
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            Mark Present
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleChangeAttendance(record.id, "absent")
+                            }
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            Mark Absent
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => handleDeleteAttendance(record.id)}
-                  className="text-red-600 hover:text-red-800"
+                  className="text-red-600 hover:text-red-800 ml-2"
                 >
                   Delete
                 </button>
