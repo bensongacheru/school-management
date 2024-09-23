@@ -1,181 +1,201 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-//import { mockTeachers } from '../mocks/teachers'; // Keep mock teachers
-import { mockStudents } from '../mocks/students'; // Keep mock students
-import StudentForm from './StudentForm'; 
-import Attendance from './attendance'; 
+import StudentForm from './StudentForm';
 import AddGradeForm from './AddGradeForm';
 
-const mockAttendance = [
-    { id: 1, date: '2024-09-01', status: 'Present' },
-    { id: 2, date: '2024-09-02', status: 'Absent' },
-];
-
-const mockGrades = [
-    { id: 1, subject: 'Math', grade: 'A', date: '2024-09-01' },
-    { id: 2, subject: 'Science', grade: 'B', date: '2024-09-02' },
-];
-
 const TeachersDashboard = () => {
-    const navigate = useNavigate();
-    const [teachers, setTeachers] = useState([]); // Initialize teachers as an empty array
-    const [selectedTeacher, setSelectedTeacher] = useState(null);
-    const [students, setStudents] = useState(mockStudents); // Keep using mock students
-    const [selectedStudent, setSelectedStudent] = useState(null);
-    const [attendance] = useState(mockAttendance);
-    const [grades] = useState(mockGrades);
-    const [showAddStudentForm, setShowAddStudentForm] = useState(false);
+  const navigate = useNavigate();
+  const [teachers, setTeachers] = useState([]);
+  const [selectedTeacher, setSelectedTeacher] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [attendance, setAttendance] = useState([]);
+  const [grades, setGrades] = useState([]);
+  const [showAddStudentForm, setShowAddStudentForm] = useState(false);
+  const [showAddGradeForm, setShowAddGradeForm] = useState(false);
 
-    // Fetch teachers from the API
-    useEffect(() => {
-        const fetchTeachers = async () => {
-            try {
-                const response = await axios.get('http://127.0.0.1:8000/teachers');
-                setTeachers(response.data); // Assuming response.data is an array of teachers
-            } catch (error) {
-                console.error('Error fetching teachers:', error);
-            }
-        };
-
-        fetchTeachers();
-    }, []);
-
-    const handleTeacherSelect = (teacher) => {
-        setSelectedTeacher(teacher);
-        const filteredStudents = mockStudents.filter(student => student.teacherId === teacher.id);
-        setStudents(filteredStudents);
-        setSelectedStudent(null);
+  useEffect(() => {
+    const fetchTeachers = async () => {
+      try {
+        const response = await axios.get('http://127.0.0.1:8000/teachers/');
+        setTeachers(response.data);
+      } catch (error) {
+        console.error('Error fetching teachers:', error);
+      }
     };
 
-    const handleStudentSelect = (student) => {
-        setSelectedStudent(student);
-    };
+    fetchTeachers();
+  }, []);
 
-    const addStudent = (newStudent) => {
-        setStudents((prevStudents) => [
-            ...prevStudents,
-            { ...newStudent, teacherId: selectedTeacher.id },
-        ]);
-    };
+  const handleTeacherSelect = async (teacher) => {
+    setSelectedTeacher(teacher);
+    try {
+      const studentsResponse = await axios.get(`http://127.0.0.1:8000/students/?teacherId=${teacher.id}`);
+      setStudents(studentsResponse.data);
+    } catch (error) {
+      console.error('Error fetching students:', error);
+    }
+    setSelectedStudent(null);
+  };
 
-    const removeStudent = (studentId) => {
-        setStudents((prevStudents) => prevStudents.filter(student => student.id !== studentId));
-        setSelectedStudent(null); // Deselect student if they are removed
-    };
+  const handleStudentSelect = async (student) => {
+    setSelectedStudent(student);
+    try {
+      const attendanceResponse = await axios.get(`http://127.0.0.1:8000/attendance/?studentId=${student.id}`);
+      setAttendance(attendanceResponse.data);
+      const gradesResponse = await axios.get(`http://127.0.0.1:8000/grades/?studentId=${student.id}`);
+      setGrades(gradesResponse.data);
+    } catch (error) {
+      console.error('Error fetching attendance or grades:', error);
+    }
+  };
 
-    const handleEditAttendance = () => {
-        navigate('/attendance', { state: { studentName: selectedStudent?.name, attendanceRecords: attendance } });
-    };
+  const addStudent = async (newStudent) => {
+    try {
+      const studentData = {
+        name: newStudent.name,
+        teacher_id: selectedTeacher.id,
+      };
+      const response = await axios.post('http://127.0.0.1:8000/students/', studentData);
+      setStudents((prevStudents) => [...prevStudents, response.data]);
+      setShowAddStudentForm(false);
+    } catch (error) {
+      console.error('Error adding student:', error);
+    }
+  };
 
-    const handleEditGrades = () => {
-        navigate('/add-grade', { state: { studentName: selectedStudent?.name } });
-    };
+  const removeStudent = async (studentId) => {
+    try {
+      await axios.delete(`http://127.0.0.1:8000/students/${studentId}`);
+      setStudents((prevStudents) => prevStudents.filter((student) => student.id !== studentId));
+      setSelectedStudent(null);
+    } catch (error) {
+      console.error('Error removing student:', error);
+    }
+  };
 
-    const handleLogout = () => {
-        navigate('/');
-    };
+  const addGrade = async (newGrade) => {
+    try {
+      const gradeData = {
+        subject: newGrade.subject,
+        grade: newGrade.grade,
+        date: newGrade.date,
+        student_id: selectedStudent.id,
+      };
+      const response = await axios.post('http://127.0.0.1:8000/grades/', gradeData);
+      setGrades((prevGrades) => [...prevGrades, response.data]);
+      setShowAddGradeForm(false);
+    } catch (error) {
+      console.error('Error adding grade:', error);
+    }
+  };
 
-    return (
-        <div className="relative flex min-h-screen bg-white">
-            <div className="w-1/4 min-h-screen p-4 bg-blue-600 shadow-md rounded-lg text-white">
-                <h2 className="text-2xl font-semibold mb-4">Teachers</h2>
-                <ul className="space-y-2">
-                    {teachers.map(teacher => (
-                        <li
-                            key={teacher.id}
-                            className={`p-2 cursor-pointer ${selectedTeacher?.id === teacher.id ? 'bg-blue-300' : 'hover:bg-blue-500'} rounded-md`}
-                            onClick={() => handleTeacherSelect(teacher)}
-                        >
-                            {teacher.name}
-                        </li>
-                    ))}
-                </ul>
-                <button
-                    className="absolute bottom-4 left-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
-                    onClick={handleLogout}
+  const handleLogout = () => {
+    navigate('/');
+  };
+
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      <div className="w-1/4 min-h-screen p-6 bg-blue-600 shadow-lg text-white rounded-l-lg">
+        <h2 className="text-2xl font-semibold mb-4">Teachers</h2>
+        <ul className="space-y-2">
+          {teachers.map((teacher) => (
+            <li
+              key={teacher.id}
+              className={`p-2 cursor-pointer transition-colors rounded-md ${selectedTeacher?.id === teacher.id ? 'bg-blue-300' : 'hover:bg-blue-500'}`}
+              onClick={() => handleTeacherSelect(teacher)}
+            >
+              {teacher.name}
+            </li>
+          ))}
+        </ul>
+        <button
+          className="absolute bottom-4 left-4 px-4 py-2 bg-red-600 rounded-md hover:bg-red-700 transition-colors"
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
+      </div>
+
+      <div className="flex-1 p-8">
+        <h1 className="text-3xl font-bold text-blue-700 mb-6">Teachers' Dashboard</h1>
+
+        {selectedTeacher && (
+          <>
+            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Students</h2>
+            <button
+              className="mb-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              onClick={() => setShowAddStudentForm(!showAddStudentForm)}
+            >
+              {showAddStudentForm ? 'Cancel' : 'Add Student'}
+            </button>
+            {showAddStudentForm && <StudentForm addStudent={addStudent} />}
+            <ul className="list-disc pl-5 space-y-2">
+              {students.map((student) => (
+                <li
+                  key={student.id}
+                  className="p-2 border rounded-md bg-white shadow hover:bg-gray-100 flex justify-between items-center"
                 >
-                    Logout
-                </button>
-            </div>
+                  <span onClick={() => handleStudentSelect(student)}>
+                    {student.name}
+                  </span>
+                  <button
+                    className="ml-4 px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                    onClick={() => removeStudent(student.id)}
+                  >
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
 
-            <div className="w-3/4 p-8">
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold text-blue-700">Teachers' Dashboard</h1>
+        {selectedStudent && (
+          <>
+            <div className="mt-6 p-6 bg-blue-100 shadow-md rounded-lg">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Attendance</h2>
+              {attendance.map((record) => (
+                <div key={record.id} className="p-2 border rounded-md bg-gray-50">
+                  <div>
+                    <strong>Date:</strong> {record.attendance_date}
+                  </div>
+                  <div>
+                    <strong>Status:</strong> {record.status}
+                  </div>
                 </div>
-
-                {selectedTeacher && (
-                    <>
-                        <h2 className="text-2xl font-semibold mb-4 text-gray-800">Students</h2>
-                        <button
-                            className="mb-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                            onClick={() => setShowAddStudentForm(!showAddStudentForm)}
-                        >
-                            {showAddStudentForm ? 'Cancel' : 'Add Student'}
-                        </button>
-                        {showAddStudentForm && <StudentForm addStudent={addStudent} />}
-                        <ul className="list-disc pl-5 space-y-2">
-                            {students.map(student => (
-                                <li
-                                    key={student.id}
-                                    className="p-2 border rounded-md bg-gray-50 flex justify-between items-center cursor-pointer hover:bg-gray-100"
-                                >
-                                    <span onClick={() => handleStudentSelect(student)}>
-                                        {student.name}
-                                    </span>
-                                    <button
-                                        className="ml-4 px-2 py-1 bg-red-600 text-white rounded-md hover:bg-red-700"
-                                        onClick={() => removeStudent(student.id)}
-                                    >
-                                        Remove
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
-                    </>
-                )}
-
-                {selectedStudent && (
-                    <>
-                        {/* Attendance Section */}
-                        <div className="mb-6 p-6 bg-blue-100 shadow-md rounded-lg">
-                            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Attendance</h2>
-                            {attendance.map(record => (
-                                <div key={record.id} className="p-2 border rounded-md bg-gray-50">
-                                    <div><strong>Date:</strong> {record.date}</div>
-                                    <div><strong>Status:</strong> {record.status}</div>
-                                </div>
-                            ))}
-                            <button
-                                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                onClick={handleEditAttendance}
-                            >
-                                Edit Attendance
-                            </button>
-                        </div>
-
-                        {/* Grades Section */}
-                        <div className="p-6 bg-blue-100 shadow-md rounded-lg">
-                            <h2 className="text-2xl font-semibold mb-4 text-gray-800">Grades</h2>
-                            {grades.map(grade => (
-                                <div key={grade.id} className="p-2 border rounded-md bg-gray-50">
-                                    <div><strong>Subject:</strong> {grade.subject}</div>
-                                    <div><strong>Grade:</strong> {grade.grade}</div>
-                                    <div><strong>Date:</strong> {grade.date}</div>
-                                </div>
-                            ))}
-                            <button
-                                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                onClick={handleEditGrades}
-                            >
-                                Edit Grades
-                            </button>
-                        </div>
-                    </>
-                )}
+              ))}
             </div>
-        </div>
-    );
+
+            <div className="mt-6 p-6 bg-blue-100 shadow-md rounded-lg">
+              <h2 className="text-2xl font-semibold mb-4 text-gray-800">Grades</h2>
+              {grades.map((grade) => (
+                <div key={grade.id} className="p-2 border rounded-md bg-gray-50">
+                  <div>
+                    <strong>Subject:</strong> {grade.subject}
+                  </div>
+                  < div>
+                    <strong>Grade:</strong> {grade.grade}
+                  </div>
+                  <div>
+                    <strong>Date:</strong> {grade.date}
+                  </div>
+                </div>
+              ))}
+              <button
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                onClick={() => setShowAddGradeForm(!showAddGradeForm)}
+              >
+                {showAddGradeForm ? 'Cancel' : 'Add Grade'}
+              </button>
+              {showAddGradeForm && <AddGradeForm addGrade={addGrade} />}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default TeachersDashboard;

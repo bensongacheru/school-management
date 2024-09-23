@@ -34,7 +34,7 @@ const StudentApp = () => {
 
   const handleDeleteStudent = async (studentId) => {
     try {
-      await axios.delete(`http://127.0.0.1:8000/students/${studentId}`);
+      await axios.delete(http://127.0.0.1:8000/students/${studentId});
       setStudents((prevStudents) => prevStudents.filter(s => s.id !== studentId));
     } catch (error) {
       console.error('Error deleting student:', error);
